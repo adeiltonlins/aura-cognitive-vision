@@ -1,40 +1,7 @@
 <!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>AURA Mobile Vision</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#050812;color:#eef3ff;font-family:system-ui,sans-serif;overflow:hidden}.app{height:100dvh;position:relative;background:#000}.camera{width:100%;height:100%;object-fit:cover}.hud{position:absolute;inset:0;pointer-events:none}.top{position:absolute;top:env(safe-area-inset-top,16px);left:16px;right:16px;display:flex;justify-content:space-between;align-items:center}.badge,.panel{background:rgba(5,8,18,.78);border:1px solid rgba(150,180,255,.2);backdrop-filter:blur(10px);border-radius:14px;padding:10px 13px}.status{color:#83e6ac;font-size:12px}.title{font-weight:700}.bottom{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,16px) + 16px);display:flex;justify-content:center}.button{pointer-events:auto;border:0;border-radius:999px;padding:15px 24px;font-weight:700;font-size:16px}.button:disabled{opacity:.65}.panel{position:absolute;left:16px;right:16px;bottom:100px;font-size:13px;display:block}.hint{opacity:.72;margin-top:5px}.cross{position:absolute;left:50%;top:50%;width:36px;height:36px;transform:translate(-50%,-50%);opacity:.5}.cross:before,.cross:after{content:"";position:absolute;background:#fff}.cross:before{width:36px;height:1px;top:18px}.cross:after{height:36px;width:1px;left:18px}</style>
-</head><body><main class="app"><video id="camera" class="camera" autoplay playsinline muted></video><div class="hud"><div class="top"><div class="badge"><div class="title">👁️ AURA</div><div class="status">● MOBILE VISION</div></div><div id="connection" class="badge">READY</div></div><div class="cross"></div><div id="panel" class="panel"><b>Percepção</b><div id="result">Toque em “Ativar câmera”. O Safari pedirá permissão para usar a câmera.</div><div class="hint" id="hint">A análise da IA será ativada depois que a câmera estiver funcionando.</div></div><div class="bottom"><button id="start" class="button">Ativar câmera</button></div></div></main><script>
-const video=document.getElementById('camera');
-const start=document.getElementById('start');
-const result=document.getElementById('result');
-const hint=document.getElementById('hint');
-const connection=document.getElementById('connection');
-
-function show(message, hintText=''){result.textContent=message;if(hintText)hint.textContent=hintText;}
-
-start.addEventListener('click', async () => {
-  start.disabled=true;
-  start.textContent='Solicitando câmera…';
-  try {
-    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('A câmera do navegador exige HTTPS e suporte a getUserMedia. Abra este endereço diretamente no Safari.');
-    }
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-    video.srcObject=stream;
-    await video.play();
-    start.textContent='Câmera ativa';
-    connection.textContent='● CAMERA ON';
-    connection.style.color='#83e6ac';
-    show('Câmera funcionando. 👁️ O AURA já está recebendo sua visão.','Agora vamos conectar os frames ao /api/perception.');
-  } catch(e) {
-    start.disabled=false;
-    start.textContent='Tentar novamente';
-    connection.textContent='CAMERA ERROR';
-    connection.style.color='#ff8b8b';
-    const name=e && e.name ? ` (${e.name})` : '';
-    show(`Não consegui abrir a câmera${name}: ${e.message || e}`,'No iPhone, verifique Ajustes → Safari → Câmera e deixe como Permitir.');
-  }
-});
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>AURA Mobile Vision</title><style>*{box-sizing:border-box}body{margin:0;background:#050812;color:#eef3ff;font-family:system-ui,sans-serif;overflow:hidden}.app{height:100dvh;position:relative;background:#000}.camera{width:100%;height:100%;object-fit:cover}.hud{position:absolute;inset:0;pointer-events:none}.top{position:absolute;top:env(safe-area-inset-top,16px);left:16px;right:16px;display:flex;justify-content:space-between;align-items:center}.badge,.panel{background:rgba(5,8,18,.78);border:1px solid rgba(150,180,255,.2);backdrop-filter:blur(10px);border-radius:14px;padding:10px 13px}.status{color:#83e6ac;font-size:12px}.title{font-weight:700}.bottom{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,16px) + 16px);display:flex;justify-content:center}.button{pointer-events:auto;border:0;border-radius:999px;padding:15px 24px;font-weight:700;font-size:16px}.button:disabled{opacity:.65}.panel{position:absolute;left:16px;right:16px;bottom:100px;font-size:13px;display:block}.hint{opacity:.72;margin-top:5px}.cross{position:absolute;left:50%;top:50%;width:36px;height:36px;transform:translate(-50%,-50%);opacity:.5}.cross:before,.cross:after{content:"";position:absolute;background:#fff}.cross:before{width:36px;height:1px;top:18px}.cross:after{height:36px;width:1px;left:18px}</style></head><body><main class="app"><video id="camera" class="camera" autoplay playsinline muted></video><div class="hud"><div class="top"><div class="badge"><div class="title">👁️ AURA</div><div class="status">● MOBILE VISION</div></div><div id="connection" class="badge">READY</div></div><div class="cross"></div><div id="panel" class="panel"><b>Percepção</b><div id="result">Toque em “Ativar câmera”.</div><div class="hint" id="hint">A análise será feita pelo servidor AURA.</div></div><div class="bottom"><button id="start" class="button">Ativar câmera</button></div></div></main><script>
+const video=document.getElementById('camera'),start=document.getElementById('start'),result=document.getElementById('result'),hint=document.getElementById('hint'),connection=document.getElementById('connection');let timer=null,busy=false;
+function show(message,h=''){result.innerHTML=message;hint.textContent=h}
+async function analyze(){if(busy||!video.videoWidth)return;busy=true;try{const c=document.createElement('canvas'),ctx=c.getContext('2d');c.width=Math.min(video.videoWidth,1280);c.height=Math.round(c.width*video.videoHeight/video.videoWidth);ctx.drawImage(video,0,0,c.width,c.height);const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.7));if(!blob)throw new Error('Não foi possível capturar o frame.');const f=new FormData();f.append('frame',blob,'frame.jpg');connection.textContent='ANALISANDO…';const response=await fetch('/api/perception',{method:'POST',body:f});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);const scene=data.scene||{};const observations=scene.observations||[];const list=observations.map(o=>`• ${o.label||'objeto'} — ${Math.round((Number(o.confidence)||0)*100)}%`).join('<br>');show(`<b>${scene.summary||'Cena analisada.'}</b>${list?`<div style="margin-top:8px">${list}</div>`:''}`,'AURA está interpretando os frames selecionados.');connection.textContent='● AURA ONLINE';connection.style.color='#83e6ac'}catch(e){connection.textContent='API ERROR';connection.style.color='#ff8b8b';show(`<span style="color:#ff9a9a">${e.message||e}</span>`,'Verifique os logs do Render se a API não responder.')}finally{busy=false}}
+start.onclick=async()=>{start.disabled=true;start.textContent='Solicitando câmera…';try{if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw new Error('A câmera exige HTTPS e suporte a getUserMedia.');const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});video.srcObject=stream;await video.play();start.textContent='AURA ATIVO';connection.textContent='CÂMERA READY';connection.style.color='#83e6ac';show('Câmera ativa. 👁️ Iniciando percepção…','Enviando um frame a cada 3 segundos para o AURA.');await analyze();timer=setInterval(analyze,3000)}catch(e){start.disabled=false;start.textContent='Tentar novamente';connection.textContent='CAMERA ERROR';show(`<span style="color:#ff9a9a">${e.message||e}</span>`,'No iPhone, permita a câmera nas configurações do Safari.')}};
 </script></body></html>
