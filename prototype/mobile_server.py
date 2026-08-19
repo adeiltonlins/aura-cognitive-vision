@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import os
-import tempfile
+from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 from openai_perception import OpenAIPerception
 
 app = Flask(__name__)
 perception = OpenAIPerception()
+MOBILE_DIR = Path(__file__).parent / "mobile"
+
+
+@app.get("/")
+def mobile_app():
+    return send_from_directory(MOBILE_DIR, "index.html")
 
 
 @app.get("/health")
@@ -22,7 +28,6 @@ def mobile_perception():
     if upload is None:
         return jsonify({"status": "error", "error": "Missing multipart field 'frame'"}), 400
 
-    # OpenCV is used only on the server; the browser never receives the API key.
     import cv2
     import numpy as np
 
