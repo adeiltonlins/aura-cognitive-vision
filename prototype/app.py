@@ -1,4 +1,9 @@
+import base64
+import json
+import os
+
 from flask import Flask, jsonify, render_template_string, request
+from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -24,7 +29,7 @@ PAGE = """
   <div class="card">
     <h1>👁️ AURA Cognitive Vision</h1>
     <p class="status">● Cognitive Vision v0.1 — online</p>
-    <p>Primeiro protótipo: preparar o ciclo <b>ver → estruturar → contextualizar</b>.</p>
+    <p>Primeiro ciclo: <b>ver → estruturar → contextualizar</b>.</p>
     <form id="visionForm">
       <input id="image" type="file" accept="image/*" required>
       <button type="submit">Analisar cena</button>
@@ -40,13 +45,73 @@ form.addEventListener('submit', async (event) => {
   const data = new FormData();
   data.append('image', document.getElementById('image').files[0]);
   result.textContent = 'Processando percepção...';
-  const response = await fetch('/analyze', { method: 'POST', body: data });
-  result.textContent = JSON.stringify(await response.json(), null, 2);
+  try {
+    const response = await fetch('/analyze', { method: 'POST', body: data });
+    result.textContent = JSON.stringify(await response.json(), null, 2);
+  } catch (error) {
+    result.textContent = JSON.stringify({error: error.message}, null, 2);
+  }
 });
 </script>
 </body>
 </html>
 """
+
+
+def get_client():
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY não configurada no ambiente.")
+    return OpenAI()
+
+
+def analyze_with_openai(image_bytes: bytes, mime_type: str):
+    encoded = base64.b64encode(image_bytes).decode("utf-8")
+    client = get_client()
+
+    prompt = """
+You are the perception layer of AURA Cognitive Vision.
+Analyze the supplied image and return ONLY valid JSON with this shape:
+{
+  "scene_summary": "short description",
+  "observations": [
+    {
+      "label": "object/entity",
+      "confidence": 0.0,
+      "location": "relative location in the image",
+      "attributes": ["..."],
+      "relevance": "why this may matter"
+    }
+  ],
+  "context": ["useful contextual inferences"],
+  "uncertainties": ["things that may be wrong or ambiguous"]
+}
+Do not invent details that cannot reasonably be inferred from the image.
+"""
+
+    response = client.responses.create(
+        model=os.getenv("AURA_VISION_MODEL", "gpt-5.6-luna"),
+        input=[{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt},
+                {
+                    "type": "input_image",
+                    "image_url": f"data:{mime_type};base64,{encoded}",
+                },
+            ],
+        }],
+    )
+
+    text = response.output_text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {
+            "scene_summary": text,
+            "observations": [],
+            "context": [],
+            "uncertainties": ["Model output was not valid JSON."]
+        }
 
 
 @app.get("/")
@@ -60,19 +125,27 @@ def analyze():
     if not image:
         return jsonify({"error": "Nenhuma imagem enviada."}), 400
 
-    # Provider-neutral placeholder. A multimodal model will populate this structure.
-    return jsonify({
-        "status": "received",
-        "filename": image.filename,
-        "pipeline": [
-            "perception",
-            "scene_model",
-            "context_engine",
-            "presentation"
-        ],
-        "observations": [],
-        "message": "Imagem recebida. Conecte um provedor multimodal para habilitar a percepção real."
-    })
+    try:
+        result = analyze_with_openai(
+            image.read(),
+            image.mimetype or "image/jpeg",
+        )
+        return jsonify({
+            "status": "analyzed",
+            "pipeline": [
+                "perception",
+                "scene_model",
+                "context_engine",
+                "presentation"
+            ],
+            **result,
+        })
+    except Exception as exc:
+        return jsonify({
+            "status": "error",
+            "error": str(exc),
+            "hint": "Configure OPENAI_API_KEY no ambiente antes de analisar imagens."
+        }), 500
 
 
 if __name__ == "__main__":
