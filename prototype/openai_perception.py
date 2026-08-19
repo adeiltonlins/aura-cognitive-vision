@@ -12,7 +12,10 @@ class OpenAIPerception:
     """Converts a camera frame into structured AURA observations."""
 
     def __init__(self, model: str | None = None) -> None:
-        self.client = OpenAI()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is not configured")
+        self.client = OpenAI(api_key=api_key)
         self.model = model or os.getenv("AURA_VISION_MODEL", "gpt-4.1-mini")
 
     def analyze(self, frame: Any) -> dict[str, Any]:
@@ -48,9 +51,9 @@ class OpenAIPerception:
 
         text = response.output_text.strip()
         try:
-            return {"status": "ok", "scene": json.loads(text)}
+            return {"status": "ok", "scene": json.loads(text), "provider": "openai"}
         except json.JSONDecodeError:
-            return {"status": "error", "error": "Vision model returned invalid JSON", "raw": text}
+            return {"status": "error", "error": "Vision model returned invalid JSON", "raw": text, "provider": "openai"}
 
 
 def frame_to_jpeg(frame: Any) -> tuple[bool, bytes]:
