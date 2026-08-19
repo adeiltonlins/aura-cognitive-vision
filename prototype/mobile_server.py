@@ -51,6 +51,8 @@ def health():
         "service": "aura-mobile-perception",
         "primary_provider": "gemini" if gemini else None,
         "fallback_provider": "openai" if openai else None,
+        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+        "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
         "gemini_model": os.getenv("AURA_GEMINI_MODEL", "gemini-2.5-flash-lite") if gemini else None,
     })
 
@@ -89,10 +91,12 @@ def mobile_perception():
         except Exception as exc:
             failures.append({"provider": "openai", "error": f"{type(exc).__name__}: {exc}"})
 
+    details = failures[-4:] or provider_errors[-4:]
+    app.logger.error("AURA perception failed: %s", details)
     return jsonify({
         "status": "error",
-        "error": "All perception providers failed",
-        "details": failures[-4:] or provider_errors[-4:],
+        "error": details[0]["error"] if details and isinstance(details[0], dict) else "All perception providers failed",
+        "details": details,
     }), 502
 
 
