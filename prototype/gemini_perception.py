@@ -24,7 +24,7 @@ class GeminiPerception:
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is not configured")
         self.api_key = api_key
-        self.model = model or os.getenv("AURA_GEMINI_MODEL", "gemini-2.5-flash-lite")
+        self.model = model or os.getenv("AURA_GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     def analyze(self, frame: Any) -> dict[str, Any]:
         ok, encoded = frame_to_jpeg(frame)
@@ -35,12 +35,7 @@ class GeminiPerception:
             "contents": [{
                 "parts": [
                     {"text": PROMPT},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": base64.b64encode(encoded).decode("ascii"),
-                        }
-                    },
+                    {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(encoded).decode("ascii")}},
                 ]
             }],
             "generationConfig": {
@@ -50,45 +45,27 @@ class GeminiPerception:
             },
         }
 
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self.api_key}"
-        )
-        body = json.dumps(payload).encode("utf-8")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         req = urllib.request.Request(
             url,
-            data=body,
+            data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
 
         try:
             with urllib.request.urlopen(req, timeout=30) as response:
-                raw = response.read().decode("utf-8")
-                result = json.loads(raw)
+                result = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            return {
-                "status": "error",
-                "error": f"Gemini HTTP {exc.code}: {detail[:1200]}",
-                "provider": "gemini",
-            }
+            return {"status": "error", "error": f"Gemini HTTP {exc.code}: {detail[:1200]}", "provider": "gemini"}
         except Exception as exc:
-            return {
-                "status": "error",
-                "error": f"Gemini request failed: {type(exc).__name__}: {exc}",
-                "provider": "gemini",
-            }
+            return {"status": "error", "error": f"Gemini request failed: {type(exc).__name__}: {exc}", "provider": "gemini"}
 
         try:
             text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
         except (KeyError, IndexError, TypeError) as exc:
-            return {
-                "status": "error",
-                "error": f"Gemini returned an unexpected response: {exc}",
-                "raw": json.dumps(result)[:2000],
-                "provider": "gemini",
-            }
+            return {"status": "error", "error": f"Gemini returned an unexpected response: {exc}", "raw": json.dumps(result)[:2000], "provider": "gemini"}
 
         if not text:
             return {"status": "error", "error": "Gemini returned an empty response", "provider": "gemini"}
@@ -96,18 +73,12 @@ class GeminiPerception:
         try:
             scene = json.loads(text)
         except json.JSONDecodeError:
-            return {
-                "status": "error",
-                "error": "Gemini returned invalid JSON",
-                "raw": text[:2000],
-                "provider": "gemini",
-            }
+            return {"status": "error", "error": "Gemini returned invalid JSON", "raw": text[:2000], "provider": "gemini"}
 
         return {"status": "ok", "scene": scene, "provider": "gemini"}
 
 
 def frame_to_jpeg(frame: Any) -> tuple[bool, bytes]:
     import cv2
-
     ok, encoded = cv2.imencode(".jpg", frame)
     return ok, encoded.tobytes() if ok else b""
