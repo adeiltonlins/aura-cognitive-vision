@@ -13,7 +13,6 @@ MOBILE_DIR = Path(__file__).parent / "mobile"
 
 
 def build_provider():
-    """Use Gemini for normal perception and OpenAI only as a fallback."""
     gemini = None
     openai = None
     errors = []
@@ -22,13 +21,17 @@ def build_provider():
         try:
             gemini = GeminiPerception()
         except Exception as exc:
-            errors.append(f"Gemini unavailable: {exc}")
+            errors.append(f"Gemini initialization failed: {type(exc).__name__}: {exc}")
+    else:
+        errors.append("GEMINI_API_KEY is not configured")
 
     if os.getenv("OPENAI_API_KEY"):
         try:
             openai = OpenAIPerception()
         except Exception as exc:
-            errors.append(f"OpenAI unavailable: {exc}")
+            errors.append(f"OpenAI initialization failed: {type(exc).__name__}: {exc}")
+    else:
+        errors.append("OPENAI_API_KEY is not configured")
 
     return gemini, openai, errors
 
@@ -48,6 +51,7 @@ def health():
         "service": "aura-mobile-perception",
         "primary_provider": "gemini" if gemini else None,
         "fallback_provider": "openai" if openai else None,
+        "gemini_model": os.getenv("AURA_GEMINI_MODEL", "gemini-2.5-flash-lite") if gemini else None,
     })
 
 
@@ -65,32 +69,30 @@ def mobile_perception():
     if frame is None:
         return jsonify({"status": "error", "error": "Invalid JPEG frame"}), 400
 
-    if not gemini and not openai:
-        return jsonify({
-            "status": "error",
-            "error": "No perception provider is configured",
-            "details": provider_errors,
-        }), 503
+    failures = []
 
     if gemini:
         try:
             result = gemini.analyze(frame)
             if result.get("status") == "ok":
                 return jsonify(result)
+            failures.append({"provider": "gemini", "error": result.get("error", "unknown error")})
         except Exception as exc:
-            provider_errors.append(f"Gemini request failed: {exc}")
+            failures.append({"provider": "gemini", "error": f"{type(exc).__name__}: {exc}"})
 
     if openai:
         try:
             result = openai.analyze(frame)
-            return jsonify(result)
+            if result.get("status") == "ok":
+                return jsonify(result)
+            failures.append({"provider": "openai", "error": result.get("error", "unknown error")})
         except Exception as exc:
-            provider_errors.append(f"OpenAI fallback failed: {exc}")
+            failures.append({"provider": "openai", "error": f"{type(exc).__name__}: {exc}"})
 
     return jsonify({
         "status": "error",
         "error": "All perception providers failed",
-        "details": provider_errors[-4:],
+        "details": failures[-4:] or provider_errors[-4:],
     }), 502
 
 
