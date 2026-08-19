@@ -7,9 +7,11 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from gemini_perception import GeminiPerception
 from openai_perception import OpenAIPerception
+from scene_memory import SceneMemory
 
 app = Flask(__name__)
 MOBILE_DIR = Path(__file__).parent / "mobile"
+scene_memory = SceneMemory()
 
 
 def build_provider():
@@ -49,11 +51,28 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "aura-mobile-perception",
+        "version": "2.0",
         "primary_provider": "gemini" if gemini else None,
         "fallback_provider": "openai" if openai else None,
         "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
         "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
-        "gemini_model": os.getenv("AURA_GEMINI_MODEL", "gemini-2.5-flash-lite") if gemini else None,
+        "gemini_model": os.getenv("AURA_GEMINI_MODEL", "gemini-3.5-flash-lite") if gemini else None,
+        "memory_objects": len(scene_memory.entities),
+    })
+
+
+@app.post("/api/memory/reset")
+def reset_memory():
+    scene_memory.reset()
+    return jsonify({"status": "ok", "message": "AURA visual memory reset"})
+
+
+@app.get("/api/memory")
+def get_memory():
+    return jsonify({
+        "status": "ok",
+        "version": "2.0",
+        "objects": scene_memory.snapshot(),
     })
 
 
@@ -77,7 +96,17 @@ def mobile_perception():
         try:
             result = gemini.analyze(frame)
             if result.get("status") == "ok":
-                return jsonify(result)
+                scene = result.get("scene") or {}
+                observations = scene.get("observations") or []
+                events = scene_memory.update(observations)
+                return jsonify({
+                    **result,
+                    "memory": {
+                        "version": "2.0",
+                        "objects": scene_memory.snapshot(),
+                        "events": events,
+                    },
+                })
             failures.append({"provider": "gemini", "error": result.get("error", "unknown error")})
         except Exception as exc:
             failures.append({"provider": "gemini", "error": f"{type(exc).__name__}: {exc}"})
@@ -86,7 +115,17 @@ def mobile_perception():
         try:
             result = openai.analyze(frame)
             if result.get("status") == "ok":
-                return jsonify(result)
+                scene = result.get("scene") or {}
+                observations = scene.get("observations") or []
+                events = scene_memory.update(observations)
+                return jsonify({
+                    **result,
+                    "memory": {
+                        "version": "2.0",
+                        "objects": scene_memory.snapshot(),
+                        "events": events,
+                    },
+                })
             failures.append({"provider": "openai", "error": result.get("error", "unknown error")})
         except Exception as exc:
             failures.append({"provider": "openai", "error": f"{type(exc).__name__}: {exc}"})
